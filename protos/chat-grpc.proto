@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+package com.santiihoyos.grpcchat.data.grpc.model.grpcchat;
+
+message HandShake {
+    int32 userId = 1;
+    string nick = 2;
+}
+
+message Message {
+    int32 userId = 1;
+    int64 dateTime = 2;
+    string message = 4;
+}
+
+message MessageResult {
+    bool wasOK = 1;
+}
+
+service Chat {
+
+    rpc write (Message) returns (MessageResult) {}
+
+    rpc listen (HandShake) returns (stream Message) {}
+}
