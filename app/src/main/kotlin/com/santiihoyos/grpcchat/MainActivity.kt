@@ -1,10 +1,15 @@
 package com.santiihoyos.grpcchat
 
+import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.santiihoyos.grpcchat.data.grpc.model.grpcchat.ChatGrpc
+import com.santiihoyos.grpcchat.data.grpc.model.grpcchat.HandShake
 import com.santiihoyos.grpcchat.data.grpc.model.grpcchat.Message
 import com.santiihoyos.grpcchat.data.grpc.model.grpcchat.MessageResult
 import io.grpc.android.AndroidChannelBuilder
@@ -17,24 +22,67 @@ import java.util.*
 class MainActivity : AppCompatActivity() {
 
     private lateinit var chatClient: ChatGrpc.ChatStub
+    private val userId by lazy {
+        Date().time.toInt()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
+        setupRecycler()
         connectToChatServer()
-        setupButton()
     }
 
     private fun connectToChatServer() {
         GlobalScope.launch(Dispatchers.IO) {
-            val managedChannels = AndroidChannelBuilder.forAddress("10.0.2.2", 24957)
+            val managedChannels = AndroidChannelBuilder.forAddress("10.0.2.2", 8888)
                 .context(this@MainActivity.applicationContext)
                 .usePlaintext()
                 .build()
 
             chatClient = ChatGrpc.newStub(managedChannels)
+            runOnUiThread {
+                listen()
+                setupButton()
+            }
         }
+    }
+
+    private fun setupRecycler() {
+        val adapterMessages = MessagesAdapter(mutableListOf())
+        findViewById<RecyclerView>(R.id.messagesRecycler).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = adapterMessages
+        }
+    }
+
+    private fun listen() {
+        chatClient.listen(
+            HandShake.newBuilder()
+                .setUserId(userId)
+                .setNick("AndroidUser-$userId")
+                .build(),
+            object : StreamObserver<Message> {
+                @SuppressLint("NotifyDataSetChanged")
+                override fun onNext(value: Message?) {
+                    runOnUiThread {
+                        findViewById<RecyclerView>(R.id.messagesRecycler).apply {
+                            (adapter as MessagesAdapter).apply {
+                                messages.add(value!!)
+                            }.notifyDataSetChanged()
+                        }
+                    }
+                }
+
+                override fun onError(t: Throwable?) {
+                    Log.e("[ERROR]", "${t?.cause}")
+                }
+
+                override fun onCompleted() {
+                    Log.i("[INFO]", "strem closed")
+                }
+            }
+        )
     }
 
     private fun setupButton() {
@@ -45,7 +93,8 @@ class MainActivity : AppCompatActivity() {
                         findViewById<EditText>(R.id.editTextTextPersonName).text.toString()
                     )
                     .setDateTime(Date().time)
-                    .setUserId(249).build(),
+                    .setUserId(userId)
+                    .build(),
                 object : StreamObserver<MessageResult> {
                     override fun onNext(value: MessageResult?) {
                         println("Result: ${value?.wasOK}")
@@ -60,6 +109,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             )
+            runOnUiThread {
+                findViewById<EditText>(R.id.editTextTextPersonName).setText("")
+            }
         }
     }
 }
